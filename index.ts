@@ -1,8 +1,11 @@
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+const require = createRequire(import.meta.url);
 
 type JsonRpcId = string | number;
 
@@ -286,7 +289,7 @@ class CodegraphMcpClient {
         {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "pi-codegraph", version: "0.1.0" },
+          clientInfo: { name: "pi-codegraph", version: "0.2.1" },
           rootUri: pathToFileURL(cwd).href,
         },
         undefined,
@@ -407,7 +410,7 @@ export default function piCodegraphExtension(pi: ExtensionAPI) {
           if (typeof args.path === "string") args.path = normalizePathArg(args.path);
 
           const result = await client.callTool(tool.name, args, signal);
-          const content = Array.isArray(result.content) ? result.content : [{ type: "text", text: "" }];
+          const content: Array<{ type: "text"; text: string }> = Array.isArray(result.content) ? result.content : [{ type: "text", text: "" }];
           const text = content.map((item) => item.text).join("\n");
           if (result.isError && /not initialized|CodeGraph not initialized|No CodeGraph project is loaded|working-directory detection issue/i.test(text)) {
             return {
