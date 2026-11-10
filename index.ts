@@ -58,17 +58,12 @@ function findCodegraphPackageRoot(): string | undefined {
 
 function loadCodegraphMetadata(packageRoot: string): {
   tools: CodegraphToolDefinition[];
-  instructions: string;
 } {
   const toolsModulePath = join(packageRoot, "lib", "dist", "mcp", "tools.js");
-  const instructionsModulePath = join(packageRoot, "lib", "dist", "mcp", "server-instructions.js");
-
   const toolsModule = require(toolsModulePath) as { tools?: CodegraphToolDefinition[] };
-  const instructionsModule = require(instructionsModulePath) as { SERVER_INSTRUCTIONS?: string };
 
   return {
     tools: Array.isArray(toolsModule.tools) ? toolsModule.tools : [],
-    instructions: typeof instructionsModule.SERVER_INSTRUCTIONS === "string" ? instructionsModule.SERVER_INSTRUCTIONS : "",
   };
 }
 
@@ -80,26 +75,13 @@ function firstSentence(text: string): string {
   return match?.[1] ?? trimmed;
 }
 
-const CODE_RESEARCH_FAST_PATH = `## Code intelligence fast path
+const CODEGRAPH_GUIDANCE = `## CodeGraph usage
 
-For verification, review, behavior analysis, or change-impact work, \`codegraph_explore\` is the required first code-intelligence tool. A workspace or repository path in the request is project context, not a directory-inventory request. Do not choose \`codegraph_files\` merely because a workspace path was provided.
-
-Even when no symbol or file is named, call \`codegraph_explore\` with the acceptance goal as the query and the workspace as \`projectPath\`. Use \`codegraph_files\` only when the requested result is specifically a file tree or directory inventory. Calling \`codegraph_files\` does not replace the initial \`codegraph_explore\` query for verification or impact analysis.
-
-Do not begin with grep, Read, or broad shell scanning. Use them only for narrow confirmation after the graph query.`;
-
-const CODEGRAPH_EXPLORE_FAST_PATH_DESCRIPTION = "Required first code-intelligence tool for verification, review, behavior analysis, and change-impact work. A workspace path is project context, not a directory-inventory request: do not choose codegraph_files merely because a path was provided. Even when no symbol or file is named, call codegraph_explore with the acceptance goal as the query and the workspace as projectPath. Call this before Read, grep, rg, find, or broad shell inspection; use raw inspection afterward only for narrow confirmation or evidence CodeGraph did not return.";
-
-const CODEGRAPH_EXPLORE_GUIDELINES = [
-  "For verification, review, behavior analysis, or change-impact work, call codegraph_explore before any other code-intelligence or raw inspection tool. Treat a supplied workspace path as projectPath, not as a request for codegraph_files. When no symbol or file is named, use the acceptance goal as the query. codegraph_files does not satisfy this initial exploration requirement; reserve it for explicit file-tree or directory-inventory requests.",
-];
+Use CodeGraph only when the task requires investigating existing code. When investigation is needed, prefer it for structural exploration.`;
 
 function toolDescription(tool: CodegraphToolDefinition): string {
   if (tool.name === "codegraph_explore") {
-    return `${tool.description}\n\n${CODEGRAPH_EXPLORE_FAST_PATH_DESCRIPTION}`;
-  }
-  if (tool.name === "codegraph_files") {
-    return `DIRECTORY INVENTORY ONLY. Use this when the requested result is specifically a file tree or directory listing. A workspace path supplied for verification is project context, not an inventory request; use codegraph_explore first for verification, review, behavior analysis, or change-impact work.\n\n${tool.description}`;
+    return "Explore existing code using a question, symbol names, or file names. Returns relevant symbols and their source grouped by file.";
   }
   return tool.description;
 }
@@ -379,7 +361,7 @@ export default function piCodegraphExtension(pi: ExtensionAPI) {
   const packageRoot = findCodegraphPackageRoot();
   if (!packageRoot) return;
 
-  const { tools, instructions } = loadCodegraphMetadata(packageRoot);
+  const { tools } = loadCodegraphMetadata(packageRoot);
   if (tools.length === 0) return;
 
   const client = new CodegraphMcpClient();
@@ -391,7 +373,6 @@ export default function piCodegraphExtension(pi: ExtensionAPI) {
       label: tool.name,
       description: toolDescription(tool),
       promptSnippet: firstSentence(toolDescription(tool)),
-      promptGuidelines: tool.name === "codegraph_explore" ? CODEGRAPH_EXPLORE_GUIDELINES : undefined,
       parameters: tool.inputSchema as any,
       prepareArguments(args) {
         if (!args || typeof args !== "object") return args as any;
@@ -439,13 +420,13 @@ export default function piCodegraphExtension(pi: ExtensionAPI) {
   pi.on("before_agent_start", async (event) => {
     const active = new Set(pi.getActiveTools());
     const hasActiveCodegraphTool = Array.from(toolNames).some((name) => active.has(name));
-    if (!hasActiveCodegraphTool || !instructions.trim()) return;
-    if (event.systemPrompt.includes("# Codegraph — code intelligence over an indexed knowledge graph")) return;
+    if (!hasActiveCodegraphTool) return;
+    if (event.systemPrompt.includes(CODEGRAPH_GUIDANCE)) return;
 
     const projectPathGuidance = `\n\n## Codegraph projectPath fallback\n\nCodeGraph finds initialized parent dirs by itself. If it still says \"Not initialized\", do not broad-scan files. Retry same tool with explicit \`projectPath\`, or ask user / run \`codegraph init\`.`;
 
     return {
-      systemPrompt: `${event.systemPrompt}\n\n${instructions}\n\n${CODE_RESEARCH_FAST_PATH}${projectPathGuidance}`,
+      systemPrompt: `${event.systemPrompt}\n\n${CODEGRAPH_GUIDANCE}${projectPathGuidance}`,
     };
   });
 

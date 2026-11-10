@@ -34,7 +34,7 @@ codegraph init
 
 The extension finds the installed `codegraph` CLI, reads its MCP tool metadata, and registers those tools inside Pi.
 
-When CodeGraph tools are active, it also adds usage guidance to Pi's prompt so the agent prefers indexed code exploration for review, debugging, impact analysis, and architecture questions.
+When CodeGraph tools are active, it also adds usage guidance to Pi's prompt: use CodeGraph only when the task requires investigating existing code, and prefer it for structural exploration.
 
 ## Development checks
 
